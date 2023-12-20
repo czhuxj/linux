@@ -118,14 +118,6 @@ struct cpuinfo_x86 new_cpu_data;
 struct apm_info apm_info;
 EXPORT_SYMBOL(apm_info);
 
-#if defined(CONFIG_X86_SPEEDSTEP_SMI) || \
-	defined(CONFIG_X86_SPEEDSTEP_SMI_MODULE)
-struct ist_info ist_info;
-EXPORT_SYMBOL(ist_info);
-#else
-struct ist_info ist_info;
-#endif
-
 #endif
 
 struct cpuinfo_x86 boot_cpu_data __read_mostly;
@@ -899,7 +891,6 @@ void __init setup_arch(char **cmdline_p)
 	edid_info = boot_params.edid_info;
 #ifdef CONFIG_X86_32
 	apm_info.bios = boot_params.apm_bios_info;
-	ist_info = boot_params.ist_info;
 #endif
 	saved_video_mode = boot_params.hdr.vid_mode;
 	bootloader_type = boot_params.hdr.type_of_loader;

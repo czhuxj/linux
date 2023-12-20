@@ -48,29 +48,6 @@ static void keyboard_init(void)
 }
 
 /*
- * Get Intel SpeedStep (IST) information.
- */
-static void query_ist(void)
-{
-	struct biosregs ireg, oreg;
-
-	/* Some older BIOSes apparently crash on this call, so filter
-	   it from machines too old to have SpeedStep at all. */
-	if (cpu.level < 6)
-		return;
-
-	initregs(&ireg);
-	ireg.ax  = 0xe980;	 /* IST Support */
-	ireg.edx = 0x47534943;	 /* Request value */
-	intcall(0x15, &ireg, &oreg);
-
-	boot_params.ist_info.signature  = oreg.eax;
-	boot_params.ist_info.command    = oreg.ebx;
-	boot_params.ist_info.event      = oreg.ecx;
-	boot_params.ist_info.perf_level = oreg.edx;
-}
-
-/*
  * Tell the BIOS what CPU mode we intend to run in.
  */
 static void set_bios_mode(void)
@@ -132,9 +109,6 @@ void main(void)
 
 	/* Set keyboard repeat rate (why?) and query the lock flags */
 	keyboard_init();
-
-	/* Query Intel SpeedStep (IST) information */
-	query_ist();
 
 	/* Query APM information */
 #if defined(CONFIG_APM) || defined(CONFIG_APM_MODULE)

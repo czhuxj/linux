@@ -45,7 +45,6 @@
 #include <linux/screen_info.h>
 #include <linux/apm_bios.h>
 #include <linux/edd.h>
-#include <asm/ist.h>
 #include <video/edid.h>
 
 /* extensible setup data list node */
@@ -187,7 +186,7 @@ struct boot_params {
 	struct apm_bios_info apm_bios_info;		/* 0x040 */
 	__u8  _pad2[4];					/* 0x054 */
 	__u64  tboot_addr;				/* 0x058 */
-	struct ist_info ist_info;			/* 0x060 */
+	__u8  _pad_ist_info[16];			/* 0x060 */
 	__u64 acpi_rsdp_addr;				/* 0x070 */
 	__u8  _pad3[8];					/* 0x078 */
 	__u8  hd0_info[16];	/* obsolete! */		/* 0x080 */
