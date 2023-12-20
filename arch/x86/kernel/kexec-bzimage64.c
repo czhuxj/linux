@@ -305,14 +305,6 @@ setup_boot_parameters(struct kimage *image, struct boot_params *params,
 	/* Setup RNG seed */
 	setup_rng_seed(params, params_load_addr, setup_data_offset);
 
-	/* Setup EDD info */
-	memcpy(params->eddbuf, boot_params.eddbuf,
-				EDDMAXNR * sizeof(struct edd_info));
-	params->eddbuf_entries = boot_params.eddbuf_entries;
-
-	memcpy(params->edd_mbr_sig_buffer, boot_params.edd_mbr_sig_buffer,
-	       EDD_MBR_SIG_MAX * sizeof(unsigned int));
-
 	return ret;
 }
 

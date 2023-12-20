@@ -65,13 +65,9 @@ static void sanitize_boot_params(struct boot_params *boot_params)
 			BOOT_PARAM_PRESERVE(alt_mem_k),
 			BOOT_PARAM_PRESERVE(scratch),
 			BOOT_PARAM_PRESERVE(e820_entries),
-			BOOT_PARAM_PRESERVE(eddbuf_entries),
-			BOOT_PARAM_PRESERVE(edd_mbr_sig_buf_entries),
-			BOOT_PARAM_PRESERVE(edd_mbr_sig_buffer),
 			BOOT_PARAM_PRESERVE(secure_boot),
 			BOOT_PARAM_PRESERVE(hdr),
 			BOOT_PARAM_PRESERVE(e820_table),
-			BOOT_PARAM_PRESERVE(eddbuf),
 			BOOT_PARAM_PRESERVE(cc_blob_address),
 		};
 

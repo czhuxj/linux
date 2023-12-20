@@ -110,11 +110,6 @@ void main(void)
 	/* Set keyboard repeat rate (why?) and query the lock flags */
 	keyboard_init();
 
-	/* Query EDD information */
-#if defined(CONFIG_EDD) || defined(CONFIG_EDD_MODULE)
-	query_edd();
-#endif
-
 	/* Set the video mode */
 	set_video();
 

@@ -20,7 +20,6 @@
 
 #include <linux/stdarg.h>
 #include <linux/types.h>
-#include <linux/edd.h>
 #include <asm/setup.h>
 #include <asm/asm.h>
 #include "bitops.h"
@@ -273,9 +272,6 @@ int validate_cpu(void);
 /* early_serial_console.c */
 extern int early_serial_base;
 void console_init(void);
-
-/* edd.c */
-void query_edd(void);
 
 /* header.S */
 void __attribute__((noreturn)) die(void);

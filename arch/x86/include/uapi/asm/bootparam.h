@@ -43,7 +43,6 @@
 
 #include <linux/types.h>
 #include <linux/screen_info.h>
-#include <linux/edd.h>
 #include <video/edid.h>
 
 /* extensible setup data list node */
@@ -202,8 +201,8 @@ struct boot_params {
 	__u32 alt_mem_k;				/* 0x1e0 */
 	__u32 scratch;		/* Scratch field! */	/* 0x1e4 */
 	__u8  e820_entries;				/* 0x1e8 */
-	__u8  eddbuf_entries;				/* 0x1e9 */
-	__u8  edd_mbr_sig_buf_entries;			/* 0x1ea */
+	__u8  _pad_eddbuf_entries;			/* 0x1e9 */
+	__u8  _pad_edd_mbr_sig_buf_entries;		/* 0x1ea */
 	__u8  kbd_status;				/* 0x1eb */
 	__u8  secure_boot;				/* 0x1ec */
 	__u8  _pad5[2];					/* 0x1ed */
@@ -222,10 +221,10 @@ struct boot_params {
 	__u8  _pad6[1];					/* 0x1f0 */
 	struct setup_header hdr;    /* setup header */	/* 0x1f1 */
 	__u8  _pad7[0x290-0x1f1-sizeof(struct setup_header)];
-	__u32 edd_mbr_sig_buffer[EDD_MBR_SIG_MAX];	/* 0x290 */
+	__u8  _pad_edd_mbr_sig_buffer[64];		/* 0x290 */
 	struct boot_e820_entry e820_table[E820_MAX_ENTRIES_ZEROPAGE]; /* 0x2d0 */
 	__u8  _pad8[48];				/* 0xcd0 */
-	struct edd_info eddbuf[EDDMAXNR];		/* 0xd00 */
+	__u8  _pad_eddbuf[492];				/* 0xd00 */
 	__u8  _pad9[276];				/* 0xeec */
 } __attribute__((packed));
 
