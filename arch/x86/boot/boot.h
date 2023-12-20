@@ -199,9 +199,6 @@ void *copy_from_gs(void *dst, addr_t src, size_t len);
 /* a20.c */
 int enable_a20(void);
 
-/* apm.c */
-int query_apm_bios(void);
-
 /* bioscall.c */
 struct biosregs {
 	union {

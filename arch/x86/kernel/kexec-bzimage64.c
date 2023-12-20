@@ -256,9 +256,6 @@ setup_boot_parameters(struct kimage *image, struct boot_params *params,
 	/* Always fill in RSDP: it is either 0 or a valid value */
 	params->acpi_rsdp_addr = boot_params.acpi_rsdp_addr;
 
-	/* Default APM info */
-	memset(&params->apm_bios_info, 0, sizeof(params->apm_bios_info));
-
 	/* Default drive info */
 	memset(&params->hd0_info, 0, sizeof(params->hd0_info));
 	memset(&params->hd1_info, 0, sizeof(params->hd1_info));

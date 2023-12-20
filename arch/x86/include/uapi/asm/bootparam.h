@@ -43,7 +43,6 @@
 
 #include <linux/types.h>
 #include <linux/screen_info.h>
-#include <linux/apm_bios.h>
 #include <linux/edd.h>
 #include <video/edid.h>
 
@@ -183,7 +182,7 @@ struct ima_setup_data {
 /* The so-called "zeropage" */
 struct boot_params {
 	struct screen_info screen_info;			/* 0x000 */
-	struct apm_bios_info apm_bios_info;		/* 0x040 */
+	__u8  _pad_apm_bios_info[20];			/* 0x040 */
 	__u8  _pad2[4];					/* 0x054 */
 	__u64  tboot_addr;				/* 0x058 */
 	__u8  _pad_ist_info[16];			/* 0x060 */

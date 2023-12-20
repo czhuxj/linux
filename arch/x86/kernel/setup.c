@@ -114,10 +114,6 @@ static struct resource bss_resource = {
 #ifdef CONFIG_X86_32
 /* CPU data as detected by the assembly code in head_32.S */
 struct cpuinfo_x86 new_cpu_data;
-
-struct apm_info apm_info;
-EXPORT_SYMBOL(apm_info);
-
 #endif
 
 struct cpuinfo_x86 boot_cpu_data __read_mostly;
@@ -889,9 +885,6 @@ void __init setup_arch(char **cmdline_p)
 	ROOT_DEV = old_decode_dev(boot_params.hdr.root_dev);
 	screen_info = boot_params.screen_info;
 	edid_info = boot_params.edid_info;
-#ifdef CONFIG_X86_32
-	apm_info.bios = boot_params.apm_bios_info;
-#endif
 	saved_video_mode = boot_params.hdr.vid_mode;
 	bootloader_type = boot_params.hdr.type_of_loader;
 	if ((bootloader_type >> 4) == 0xe) {
