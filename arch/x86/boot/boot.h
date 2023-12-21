@@ -166,35 +166,6 @@ static inline bool memcmp_gs(const void *s1, addr_t s2, size_t len)
 	return diff;
 }
 
-/* Heap -- available for dynamic lists. */
-extern char _end[];
-extern char *HEAP;
-extern char *heap_end;
-#define RESET_HEAP() ((void *)( HEAP = _end ))
-static inline char *__get_heap(size_t s, size_t a, size_t n)
-{
-	char *tmp;
-
-	HEAP = (char *)(((size_t)HEAP+(a-1)) & ~(a-1));
-	tmp = HEAP;
-	HEAP += s*n;
-	return tmp;
-}
-#define GET_HEAP(type, n) \
-	((type *)__get_heap(sizeof(type),__alignof__(type),(n)))
-
-static inline bool heap_free(size_t n)
-{
-	return (int)(heap_end-HEAP) >= (int)n;
-}
-
-/* copy.S */
-
-void copy_to_fs(addr_t dst, void *src, size_t len);
-void *copy_from_fs(void *dst, addr_t src, size_t len);
-void copy_to_gs(addr_t dst, void *src, size_t len);
-void *copy_from_gs(void *dst, addr_t src, size_t len);
-
 /* a20.c */
 int enable_a20(void);
 
@@ -306,20 +277,9 @@ char *strchr(const char *s, int c);
 /* tty.c */
 void puts(const char *);
 void putchar(int);
-int getchar(void);
-void kbd_flush(void);
-int getchar_timeout(void);
 
 /* video.c */
 void set_video(void);
-
-/* video-mode.c */
-int set_mode(u16 mode);
-int mode_defined(u16 mode);
-void probe_cards(int unsafe);
-
-/* video-vesa.c */
-void vesa_store_edid(void);
 
 #endif /* __ASSEMBLY__ */
 

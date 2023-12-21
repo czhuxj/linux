@@ -17,9 +17,6 @@
 
 struct boot_params boot_params __attribute__((aligned(16)));
 
-char *HEAP = _end;
-char *heap_end = _end;		/* Default end of heap = no heap */
-
 /*
  * Copy the header into the boot parameter block.
  */
@@ -62,25 +59,6 @@ static void set_bios_mode(void)
 #endif
 }
 
-static void init_heap(void)
-{
-	char *stack_end;
-
-	if (boot_params.hdr.loadflags & CAN_USE_HEAP) {
-		asm("leal %P1(%%esp),%0"
-		    : "=r" (stack_end) : "i" (-STACK_SIZE));
-
-		heap_end = (char *)
-			((size_t)boot_params.hdr.heap_end_ptr + 0x200);
-		if (heap_end > stack_end)
-			heap_end = stack_end;
-	} else {
-		/* Boot protocol 2.00 only, no heap available */
-		puts("WARNING: Ancient bootloader, some functionality "
-		     "may be limited!\n");
-	}
-}
-
 void main(void)
 {
 	/* First, copy the boot header into the "zeropage" */
@@ -90,9 +68,6 @@ void main(void)
 	console_init();
 	if (cmdline_find_option_bool("debug"))
 		puts("early console in setup code\n");
-
-	/* End of heap check */
-	init_heap();
 
 	/* Make sure we have all the proper CPU support */
 	if (validate_cpu()) {

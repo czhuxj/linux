@@ -28,10 +28,6 @@
 BOOTSEG		= 0x07C0		/* original address of boot-sector */
 SYSSEG		= 0x1000		/* historical load address >> 4 */
 
-#ifndef SVGA_MODE
-#define SVGA_MODE ASK_VGA
-#endif
-
 #ifndef ROOT_RDONLY
 #define ROOT_RDONLY 1
 #endif
@@ -94,7 +90,7 @@ setup_sects:	.byte 0			/* Filled in by build.c */
 root_flags:	.word ROOT_RDONLY
 syssize:	.long 0			/* Filled in by build.c */
 ram_size:	.word 0			/* Obsolete */
-vid_mode:	.word SVGA_MODE
+vid_mode:	.word 0			/* Not used */
 root_dev:	.word 0			/* Filled in by build.c */
 boot_flag:	.word 0xAA55
 

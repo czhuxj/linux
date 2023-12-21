@@ -4,7 +4,6 @@
 
 
 #include <asm/pgtable_types.h>
-#include <uapi/asm/boot.h>
 
 /* Physical address where kernel should be loaded. */
 #define LOAD_PHYSICAL_ADDR ((CONFIG_PHYSICAL_START \
