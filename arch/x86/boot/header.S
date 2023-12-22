@@ -15,7 +15,7 @@
  * hex while segment addresses are written as segment:offset.
  *
  */
-#include <linux/pe.h>
+
 #include <asm/segment.h>
 #include <asm/boot.h>
 #include <asm/page_types.h>
@@ -41,11 +41,6 @@ SYSSEG		= 0x1000		/* historical load address >> 4 */
 
 	.global bootsect_start
 bootsect_start:
-#ifdef CONFIG_EFI_STUB
-	# "MZ", MS-DOS header
-	.word	MZ_MAGIC
-#endif
-
 	# Normalize the start address
 	ljmp	$BOOTSEG, $start2
 
@@ -79,203 +74,12 @@ bs_die:
 	# invoke the BIOS reset code...
 	ljmp	$0xf000,$0xfff0
 
-#ifdef CONFIG_EFI_STUB
-	.org	0x38
-	#
-	# Offset to the PE header.
-	#
-	.long	LINUX_PE_MAGIC
-	.long	pe_header
-#endif /* CONFIG_EFI_STUB */
-
 	.section ".bsdata", "a"
 bugger_off_msg:
 	.ascii	"Use a boot loader.\r\n"
 	.ascii	"\n"
 	.ascii	"Remove disk and press any key to reboot...\r\n"
 	.byte	0
-
-#ifdef CONFIG_EFI_STUB
-pe_header:
-	.long	PE_MAGIC
-
-coff_header:
-#ifdef CONFIG_X86_32
-	.set	image_file_add_flags, IMAGE_FILE_32BIT_MACHINE
-	.set	pe_opt_magic, PE_OPT_MAGIC_PE32
-	.word	IMAGE_FILE_MACHINE_I386
-#else
-	.set	image_file_add_flags, 0
-	.set	pe_opt_magic, PE_OPT_MAGIC_PE32PLUS
-	.word	IMAGE_FILE_MACHINE_AMD64
-#endif
-	.word	section_count			# nr_sections
-	.long	0 				# TimeDateStamp
-	.long	0				# PointerToSymbolTable
-	.long	1				# NumberOfSymbols
-	.word	section_table - optional_header	# SizeOfOptionalHeader
-	.word	IMAGE_FILE_EXECUTABLE_IMAGE	| \
-		image_file_add_flags		| \
-		IMAGE_FILE_DEBUG_STRIPPED	| \
-		IMAGE_FILE_LINE_NUMS_STRIPPED	# Characteristics
-
-optional_header:
-	.word	pe_opt_magic
-	.byte	0x02				# MajorLinkerVersion
-	.byte	0x14				# MinorLinkerVersion
-
-	# Filled in by build.c
-	.long	0				# SizeOfCode
-
-	.long	0				# SizeOfInitializedData
-	.long	0				# SizeOfUninitializedData
-
-	# Filled in by build.c
-	.long	0x0000				# AddressOfEntryPoint
-
-	.long	0x0200				# BaseOfCode
-#ifdef CONFIG_X86_32
-	.long	0				# data
-#endif
-
-extra_header_fields:
-	# PE specification requires ImageBase to be 64k aligned
-	.set	image_base, (LOAD_PHYSICAL_ADDR + 0xffff) & ~0xffff
-#ifdef CONFIG_X86_32
-	.long	image_base			# ImageBase
-#else
-	.quad	image_base			# ImageBase
-#endif
-	.long	0x20				# SectionAlignment
-	.long	0x20				# FileAlignment
-	.word	0				# MajorOperatingSystemVersion
-	.word	0				# MinorOperatingSystemVersion
-	.word	LINUX_EFISTUB_MAJOR_VERSION	# MajorImageVersion
-	.word	LINUX_EFISTUB_MINOR_VERSION	# MinorImageVersion
-	.word	0				# MajorSubsystemVersion
-	.word	0				# MinorSubsystemVersion
-	.long	0				# Win32VersionValue
-
-	#
-	# The size of the bzImage is written in tools/build.c
-	#
-	.long	0				# SizeOfImage
-
-	.long	0x200				# SizeOfHeaders
-	.long	0				# CheckSum
-	.word	IMAGE_SUBSYSTEM_EFI_APPLICATION	# Subsystem (EFI application)
-#ifdef CONFIG_EFI_DXE_MEM_ATTRIBUTES
-	.word	IMAGE_DLL_CHARACTERISTICS_NX_COMPAT	# DllCharacteristics
-#else
-	.word	0				# DllCharacteristics
-#endif
-#ifdef CONFIG_X86_32
-	.long	0				# SizeOfStackReserve
-	.long	0				# SizeOfStackCommit
-	.long	0				# SizeOfHeapReserve
-	.long	0				# SizeOfHeapCommit
-#else
-	.quad	0				# SizeOfStackReserve
-	.quad	0				# SizeOfStackCommit
-	.quad	0				# SizeOfHeapReserve
-	.quad	0				# SizeOfHeapCommit
-#endif
-	.long	0				# LoaderFlags
-	.long	(section_table - .) / 8		# NumberOfRvaAndSizes
-
-	.quad	0				# ExportTable
-	.quad	0				# ImportTable
-	.quad	0				# ResourceTable
-	.quad	0				# ExceptionTable
-	.quad	0				# CertificationTable
-	.quad	0				# BaseRelocationTable
-
-	# Section table
-section_table:
-	#
-	# The offset & size fields are filled in by build.c.
-	#
-	.ascii	".setup"
-	.byte	0
-	.byte	0
-	.long	0
-	.long	0x0				# startup_{32,64}
-	.long	0				# Size of initialized data
-						# on disk
-	.long	0x0				# startup_{32,64}
-	.long	0				# PointerToRelocations
-	.long	0				# PointerToLineNumbers
-	.word	0				# NumberOfRelocations
-	.word	0				# NumberOfLineNumbers
-	.long	IMAGE_SCN_CNT_CODE		| \
-		IMAGE_SCN_MEM_READ		| \
-		IMAGE_SCN_MEM_EXECUTE		| \
-		IMAGE_SCN_ALIGN_16BYTES		# Characteristics
-
-	#
-	# The EFI application loader requires a relocation section
-	# because EFI applications must be relocatable. The .reloc
-	# offset & size fields are filled in by build.c.
-	#
-	.ascii	".reloc"
-	.byte	0
-	.byte	0
-	.long	0
-	.long	0
-	.long	0				# SizeOfRawData
-	.long	0				# PointerToRawData
-	.long	0				# PointerToRelocations
-	.long	0				# PointerToLineNumbers
-	.word	0				# NumberOfRelocations
-	.word	0				# NumberOfLineNumbers
-	.long	IMAGE_SCN_CNT_INITIALIZED_DATA	| \
-		IMAGE_SCN_MEM_READ		| \
-		IMAGE_SCN_MEM_DISCARDABLE	| \
-		IMAGE_SCN_ALIGN_1BYTES		# Characteristics
-
-#ifdef CONFIG_EFI_MIXED
-	#
-	# The offset & size fields are filled in by build.c.
-	#
-	.asciz	".compat"
-	.long	0
-	.long	0x0
-	.long	0				# Size of initialized data
-						# on disk
-	.long	0x0
-	.long	0				# PointerToRelocations
-	.long	0				# PointerToLineNumbers
-	.word	0				# NumberOfRelocations
-	.word	0				# NumberOfLineNumbers
-	.long	IMAGE_SCN_CNT_INITIALIZED_DATA	| \
-		IMAGE_SCN_MEM_READ		| \
-		IMAGE_SCN_MEM_DISCARDABLE	| \
-		IMAGE_SCN_ALIGN_1BYTES		# Characteristics
-#endif
-
-	#
-	# The offset & size fields are filled in by build.c.
-	#
-	.ascii	".text"
-	.byte	0
-	.byte	0
-	.byte	0
-	.long	0
-	.long	0x0				# startup_{32,64}
-	.long	0				# Size of initialized data
-						# on disk
-	.long	0x0				# startup_{32,64}
-	.long	0				# PointerToRelocations
-	.long	0				# PointerToLineNumbers
-	.word	0				# NumberOfRelocations
-	.word	0				# NumberOfLineNumbers
-	.long	IMAGE_SCN_CNT_CODE		| \
-		IMAGE_SCN_MEM_READ		| \
-		IMAGE_SCN_MEM_EXECUTE		| \
-		IMAGE_SCN_ALIGN_16BYTES		# Characteristics
-
-	.set	section_count, (. - section_table) / 40
-#endif /* CONFIG_EFI_STUB */
 
 	# Kernel attributes; used by setup.  This is part 1 of the
 	# header, from the old boot sector.
@@ -407,25 +211,9 @@ xloadflags:
 # define XLF1 0
 #endif
 
-#ifdef CONFIG_EFI_HANDOVER_PROTOCOL
-# ifdef CONFIG_EFI_MIXED
-#  define XLF23 (XLF_EFI_HANDOVER_32|XLF_EFI_HANDOVER_64)
-# else
-#  ifdef CONFIG_X86_64
-#   define XLF23 XLF_EFI_HANDOVER_64		/* 64-bit EFI handover ok */
-#  else
-#   define XLF23 XLF_EFI_HANDOVER_32		/* 32-bit EFI handover ok */
-#  endif
-# endif
-#else
-# define XLF23 0
-#endif
+#define XLF23 0
 
-#if defined(CONFIG_X86_64) && defined(CONFIG_EFI) && defined(CONFIG_KEXEC_CORE)
-# define XLF4 XLF_EFI_KEXEC
-#else
-# define XLF4 0
-#endif
+#define XLF4 0
 
 #ifdef CONFIG_X86_64
 #ifdef CONFIG_X86_5LEVEL

@@ -74,11 +74,6 @@ LDFLAGS_vmlinux += -z noexecstack
 ifeq ($(CONFIG_LD_IS_BFD),y)
 LDFLAGS_vmlinux += $(call ld-option,--no-warn-rwx-segments)
 endif
-ifeq ($(CONFIG_EFI_STUB),y)
-# ensure that the static EFI stub library will be pulled in, even if it is
-# never referenced explicitly from the startup code
-LDFLAGS_vmlinux += -u efi_pe_entry
-endif
 LDFLAGS_vmlinux += -T
 
 hostprogs	:= mkpiggy
@@ -112,11 +107,6 @@ endif
 
 vmlinux-objs-$(CONFIG_ACPI) += $(obj)/acpi.o
 vmlinux-objs-$(CONFIG_INTEL_TDX_GUEST) += $(obj)/tdx.o $(obj)/tdcall.o $(obj)/tdx-shared.o
-vmlinux-objs-$(CONFIG_UNACCEPTED_MEMORY) += $(obj)/mem.o
-
-vmlinux-objs-$(CONFIG_EFI) += $(obj)/efi.o
-vmlinux-objs-$(CONFIG_EFI_MIXED) += $(obj)/efi_mixed.o
-vmlinux-objs-$(CONFIG_EFI_STUB) += $(objtree)/drivers/firmware/efi/libstub/lib.a
 
 $(obj)/vmlinux: $(vmlinux-objs-y) FORCE
 	$(call if_changed,ld)

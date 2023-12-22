@@ -22,7 +22,6 @@
 #include "misc.h"
 #include "error.h"
 #include "../string.h"
-#include "efi.h"
 
 #include <generated/compile.h>
 #include <linux/module.h>
@@ -121,7 +120,6 @@ char *skip_spaces(const char *str)
 
 enum parse_mode {
 	PARSE_MEMMAP,
-	PARSE_EFI,
 };
 
 static int
@@ -153,22 +151,6 @@ parse_memmap(char *p, u64 *start, u64 *size, enum parse_mode mode)
 			 * memmap=nn@ss specifies usable region, should
 			 * be skipped
 			 */
-			*size = 0;
-		} else {
-			u64 flags;
-
-			/*
-			 * efi_fake_mem=nn@ss:attr the attr specifies
-			 * flags that might imply a soft-reservation.
-			 */
-			*start = memparse(p + 1, &p);
-			if (p && *p == ':') {
-				p++;
-				if (kstrtoull(p, 0, &flags) < 0)
-					*size = 0;
-				else if (flags & EFI_MEMORY_SP)
-					return 0;
-			}
 			*size = 0;
 		}
 		fallthrough;
@@ -295,8 +277,6 @@ static void handle_mem_options(void)
 
 			if (mem_size < mem_limit)
 				mem_limit = mem_size;
-		} else if (!strcmp(param, "efi_fake_mem")) {
-			mem_avoid_memmap(PARSE_EFI, val);
 		}
 	}
 
@@ -634,7 +614,7 @@ static bool process_mem_region(struct mem_vector *region,
 		__process_mem_region(region, minimum, image_size);
 
 		if (slot_area_index == MAX_SLOT_AREA) {
-			debug_putstr("Aborted e820/efi memmap scan (slot_areas full)!\n");
+			debug_putstr("Aborted e820 memmap scan (slot_areas full)!\n");
 			return true;
 		}
 		return false;
@@ -663,111 +643,13 @@ static bool process_mem_region(struct mem_vector *region,
 		__process_mem_region(&entry, minimum, image_size);
 
 		if (slot_area_index == MAX_SLOT_AREA) {
-			debug_putstr("Aborted e820/efi memmap scan when walking immovable regions(slot_areas full)!\n");
+			debug_putstr("Aborted e820 memmap scan when walking immovable regions(slot_areas full)!\n");
 			return true;
 		}
 	}
 #endif
 	return false;
 }
-
-#ifdef CONFIG_EFI
-
-/*
- * Only EFI_CONVENTIONAL_MEMORY and EFI_UNACCEPTED_MEMORY (if supported) are
- * guaranteed to be free.
- *
- * Pick free memory more conservatively than the EFI spec allows: according to
- * the spec, EFI_BOOT_SERVICES_{CODE|DATA} are also free memory and thus
- * available to place the kernel image into, but in practice there's firmware
- * where using that memory leads to crashes. Buggy vendor EFI code registers
- * for an event that triggers on SetVirtualAddressMap(). The handler assumes
- * that EFI_BOOT_SERVICES_DATA memory has not been touched by loader yet, which
- * is probably true for Windows.
- *
- * Preserve EFI_BOOT_SERVICES_* regions until after SetVirtualAddressMap().
- */
-static inline bool memory_type_is_free(efi_memory_desc_t *md)
-{
-	if (md->type == EFI_CONVENTIONAL_MEMORY)
-		return true;
-
-	if (IS_ENABLED(CONFIG_UNACCEPTED_MEMORY) &&
-	    md->type == EFI_UNACCEPTED_MEMORY)
-		    return true;
-
-	return false;
-}
-
-/*
- * Returns true if we processed the EFI memmap, which we prefer over the E820
- * table if it is available.
- */
-static bool
-process_efi_entries(unsigned long minimum, unsigned long image_size)
-{
-	struct efi_info *e = &boot_params->efi_info;
-	bool efi_mirror_found = false;
-	struct mem_vector region;
-	efi_memory_desc_t *md;
-	unsigned long pmap;
-	char *signature;
-	u32 nr_desc;
-	int i;
-
-	signature = (char *)&e->efi_loader_signature;
-	if (strncmp(signature, EFI32_LOADER_SIGNATURE, 4) &&
-	    strncmp(signature, EFI64_LOADER_SIGNATURE, 4))
-		return false;
-
-#ifdef CONFIG_X86_32
-	/* Can't handle data above 4GB at this time */
-	if (e->efi_memmap_hi) {
-		warn("EFI memmap is above 4GB, can't be handled now on x86_32. EFI should be disabled.\n");
-		return false;
-	}
-	pmap =  e->efi_memmap;
-#else
-	pmap = (e->efi_memmap | ((__u64)e->efi_memmap_hi << 32));
-#endif
-
-	nr_desc = e->efi_memmap_size / e->efi_memdesc_size;
-	for (i = 0; i < nr_desc; i++) {
-		md = efi_early_memdesc_ptr(pmap, e->efi_memdesc_size, i);
-		if (md->attribute & EFI_MEMORY_MORE_RELIABLE) {
-			efi_mirror_found = true;
-			break;
-		}
-	}
-
-	for (i = 0; i < nr_desc; i++) {
-		md = efi_early_memdesc_ptr(pmap, e->efi_memdesc_size, i);
-
-		if (!memory_type_is_free(md))
-			continue;
-
-		if (efi_soft_reserve_enabled() &&
-		    (md->attribute & EFI_MEMORY_SP))
-			continue;
-
-		if (efi_mirror_found &&
-		    !(md->attribute & EFI_MEMORY_MORE_RELIABLE))
-			continue;
-
-		region.start = md->phys_addr;
-		region.size = md->num_pages << EFI_PAGE_SHIFT;
-		if (process_mem_region(&region, minimum, image_size))
-			break;
-	}
-	return true;
-}
-#else
-static inline bool
-process_efi_entries(unsigned long minimum, unsigned long image_size)
-{
-	return false;
-}
-#endif
 
 static void process_e820_entries(unsigned long minimum,
 				 unsigned long image_size)
@@ -804,8 +686,7 @@ static unsigned long find_random_phys_addr(unsigned long minimum,
 		return 0;
 	}
 
-	if (!process_efi_entries(minimum, image_size))
-		process_e820_entries(minimum, image_size);
+	process_e820_entries(minimum, image_size);
 
 	phys_addr = slots_fetch_random();
 

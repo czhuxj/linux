@@ -3,7 +3,6 @@
 #include "misc.h"
 #include "error.h"
 #include "../string.h"
-#include "efi.h"
 
 #include <linux/numa.h>
 
@@ -18,61 +17,6 @@
  * MAX_NUMNODES*2.
  */
 struct mem_vector immovable_mem[MAX_NUMNODES*2];
-
-static acpi_physical_address
-__efi_get_rsdp_addr(unsigned long cfg_tbl_pa, unsigned int cfg_tbl_len)
-{
-#ifdef CONFIG_EFI
-	unsigned long rsdp_addr;
-	int ret;
-
-	/*
-	 * Search EFI system tables for RSDP. Preferred is ACPI_20_TABLE_GUID to
-	 * ACPI_TABLE_GUID because it has more features.
-	 */
-	rsdp_addr = efi_find_vendor_table(boot_params, cfg_tbl_pa, cfg_tbl_len,
-					  ACPI_20_TABLE_GUID);
-	if (rsdp_addr)
-		return (acpi_physical_address)rsdp_addr;
-
-	/* No ACPI_20_TABLE_GUID found, fallback to ACPI_TABLE_GUID. */
-	rsdp_addr = efi_find_vendor_table(boot_params, cfg_tbl_pa, cfg_tbl_len,
-					  ACPI_TABLE_GUID);
-	if (rsdp_addr)
-		return (acpi_physical_address)rsdp_addr;
-
-	debug_putstr("Error getting RSDP address.\n");
-#endif
-	return 0;
-}
-
-static acpi_physical_address efi_get_rsdp_addr(void)
-{
-#ifdef CONFIG_EFI
-	unsigned long cfg_tbl_pa = 0;
-	unsigned int cfg_tbl_len;
-	unsigned long systab_pa;
-	unsigned int nr_tables;
-	enum efi_type et;
-	int ret;
-
-	et = efi_get_type(boot_params);
-	if (et == EFI_TYPE_NONE)
-		return 0;
-
-	systab_pa = efi_get_system_table(boot_params);
-	if (!systab_pa)
-		error("EFI support advertised, but unable to locate system table.");
-
-	ret = efi_get_conf_table(boot_params, &cfg_tbl_pa, &cfg_tbl_len);
-	if (ret || !cfg_tbl_pa)
-		error("EFI config table not found.");
-
-	return __efi_get_rsdp_addr(cfg_tbl_pa, cfg_tbl_len);
-#else
-	return 0;
-#endif
-}
 
 static u8 compute_checksum(u8 *buffer, u32 length)
 {
@@ -157,9 +101,6 @@ acpi_physical_address get_rsdp_addr(void)
 	acpi_physical_address pa;
 
 	pa = boot_params->acpi_rsdp_addr;
-
-	if (!pa)
-		pa = efi_get_rsdp_addr();
 
 	if (!pa)
 		pa = bios_get_rsdp_addr();

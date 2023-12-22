@@ -479,11 +479,6 @@ asmlinkage __visible void *extract_kernel(void *rmode, unsigned char *output)
 
 	debug_putstr("\nDecompressing Linux... ");
 
-	if (init_unaccepted_memory()) {
-		debug_putstr("Accepting memory... ");
-		accept_memory(__pa(output), __pa(output) + needed_size);
-	}
-
 	entry_offset = decompress_kernel(output, virt_addr, error);
 
 	debug_putstr("done.\nBooting the kernel (entry_offset: 0x");

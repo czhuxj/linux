@@ -4,7 +4,6 @@
 #include <asm/processor.h>
 #include "pgtable.h"
 #include "../string.h"
-#include "efi.h"
 
 #define BIOS_START_MIN		0x20000U	/* 128K, less than this is insane */
 #define BIOS_START_MAX		0x9f000U	/* 640K, absolute maximum */
@@ -33,9 +32,8 @@ int cmdline_find_option_bool(const char *option);
 
 static unsigned long find_trampoline_placement(void)
 {
-	unsigned long bios_start = 0, ebda_start = 0;
+	unsigned long bios_start = 0;
 	struct boot_e820_entry *entry;
-	char *signature;
 	int i;
 
 	/*
@@ -43,24 +41,8 @@ static unsigned long find_trampoline_placement(void)
 	 * This code is based on reserve_bios_regions().
 	 */
 
-	/*
-	 * EFI systems may not provide legacy ROM. The memory may not be mapped
-	 * at all.
-	 *
-	 * Only look for values in the legacy ROM for non-EFI system.
-	 */
-	signature = (char *)&boot_params->efi_info.efi_loader_signature;
-	if (strncmp(signature, EFI32_LOADER_SIGNATURE, 4) &&
-	    strncmp(signature, EFI64_LOADER_SIGNATURE, 4)) {
-		ebda_start = *(unsigned short *)0x40e << 4;
-		bios_start = *(unsigned short *)0x413 << 10;
-	}
-
 	if (bios_start < BIOS_START_MIN || bios_start > BIOS_START_MAX)
 		bios_start = BIOS_START_MAX;
-
-	if (ebda_start > BIOS_START_MIN && ebda_start < bios_start)
-		bios_start = ebda_start;
 
 	bios_start = round_down(bios_start, PAGE_SIZE);
 
