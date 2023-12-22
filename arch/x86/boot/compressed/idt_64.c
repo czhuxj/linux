@@ -32,10 +32,6 @@ void load_stage1_idt(void)
 {
 	boot_idt_desc.address = (unsigned long)boot_idt;
 
-
-	if (IS_ENABLED(CONFIG_AMD_MEM_ENCRYPT))
-		set_idt_entry(X86_TRAP_VC, boot_stage1_vc);
-
 	load_boot_idt(&boot_idt_desc);
 }
 
@@ -48,13 +44,6 @@ void load_stage1_idt(void)
  *
  * This #PF handler setup needs to happen in load_stage2_idt() where the
  * IDT is loaded and there the #VC IDT entry gets setup too.
- *
- * In order to be able to handle #VCs, one needs a GHCB which
- * gets setup with an already set up pagetable, which is done in
- * initialize_identity_maps(). And there's the catch 22: the boot #VC
- * handler do_boot_stage2_vc() needs to call early_setup_ghcb() itself
- * (and, especially set_page_decrypted()) because the SEV-ES setup code
- * cannot initialize a GHCB as there's no #PF handler yet...
  */
 void load_stage2_idt(void)
 {
@@ -62,28 +51,11 @@ void load_stage2_idt(void)
 
 	set_idt_entry(X86_TRAP_PF, boot_page_fault);
 
-#ifdef CONFIG_AMD_MEM_ENCRYPT
-	/*
-	 * Clear the second stage #VC handler in case guest types
-	 * needing #VC have not been detected.
-	 */
-	if (sev_status & BIT(1))
-		set_idt_entry(X86_TRAP_VC, boot_stage2_vc);
-	else
-		set_idt_entry(X86_TRAP_VC, NULL);
-#endif
-
 	load_boot_idt(&boot_idt_desc);
 }
 
 void cleanup_exception_handling(void)
 {
-	/*
-	 * Flush GHCB from cache and map it encrypted again when running as
-	 * SEV-ES guest.
-	 */
-	sev_es_shutdown_ghcb();
-
 	/* Set a null-idt, disabling #PF and #VC handling */
 	boot_idt_desc.size    = 0;
 	boot_idt_desc.address = 0;

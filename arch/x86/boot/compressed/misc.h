@@ -113,9 +113,6 @@ static inline void choose_random_location(unsigned long input,
 bool has_cpuflag(int flag);
 
 #ifdef CONFIG_X86_64
-extern int set_page_decrypted(unsigned long address);
-extern int set_page_encrypted(unsigned long address);
-extern int set_page_non_present(unsigned long address);
 extern unsigned char _pgtable[];
 #endif
 
@@ -127,37 +124,6 @@ void console_init(void);
 static const int early_serial_base;
 static inline void console_init(void)
 { }
-#endif
-
-#ifdef CONFIG_AMD_MEM_ENCRYPT
-void sev_enable(struct boot_params *bp);
-void snp_check_features(void);
-void sev_es_shutdown_ghcb(void);
-extern bool sev_es_check_ghcb_fault(unsigned long address);
-void snp_set_page_private(unsigned long paddr);
-void snp_set_page_shared(unsigned long paddr);
-void sev_prep_identity_maps(unsigned long top_level_pgt);
-#else
-static inline void sev_enable(struct boot_params *bp)
-{
-	/*
-	 * bp->cc_blob_address should only be set by boot/compressed kernel.
-	 * Initialize it to 0 unconditionally (thus here in this stub too) to
-	 * ensure that uninitialized values from buggy bootloaders aren't
-	 * propagated.
-	 */
-	if (bp)
-		bp->cc_blob_address = 0;
-}
-static inline void snp_check_features(void) { }
-static inline void sev_es_shutdown_ghcb(void) { }
-static inline bool sev_es_check_ghcb_fault(unsigned long address)
-{
-	return false;
-}
-static inline void snp_set_page_private(unsigned long paddr) { }
-static inline void snp_set_page_shared(unsigned long paddr) { }
-static inline void sev_prep_identity_maps(unsigned long top_level_pgt) { }
 #endif
 
 /* acpi.c */
@@ -193,9 +159,5 @@ static inline void cleanup_exception_handling(void) { }
 
 /* IDT Entry Points */
 void boot_page_fault(void);
-void boot_stage1_vc(void);
-void boot_stage2_vc(void);
-
-unsigned long sev_verify_cbit(unsigned long cr3);
 
 #endif /* BOOT_COMPRESSED_MISC_H */
