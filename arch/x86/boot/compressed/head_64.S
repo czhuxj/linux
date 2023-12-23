@@ -35,7 +35,6 @@
 #include <asm/bootparam.h>
 #include <asm/desc_defs.h>
 #include <asm/trapnr.h>
-#include "pgtable.h"
 
 /*
  * Fix alignment at 16 bytes. Following CONFIG_FUNCTION_ALIGNMENT will result
@@ -299,27 +298,6 @@ SYM_CODE_START(startup_64)
 	/* Set up the stack */
 	leaq	rva(boot_stack_end)(%rbx), %rsp
 
-	/*
-	 * At this point we are in long mode with 4-level paging enabled,
-	 * but we might want to enable 5-level paging or vice versa.
-	 *
-	 * The problem is that we cannot do it directly. Setting or clearing
-	 * CR4.LA57 in long mode would trigger #GP. So we need to switch off
-	 * long mode and paging first.
-	 *
-	 * We also need a trampoline in lower memory to switch over from
-	 * 4- to 5-level paging for cases when the bootloader puts the kernel
-	 * above 4G, but didn't enable 5-level paging for us.
-	 *
-	 * The same trampoline can be used to switch from 5- to 4-level paging
-	 * mode, like when starting 4-level paging kernel via kexec() when
-	 * original kernel worked in 5-level paging mode.
-	 *
-	 * For the trampoline, we need the top page table to reside in lower
-	 * memory as we don't have a way to load 64-bit values into CR3 in
-	 * 32-bit mode.
-	 */
-
 	/* Make sure we have GDT with 32-bit code segment */
 	leaq	gdt64(%rip), %rax
 	addq	%rax, 2(%rax)
@@ -340,19 +318,6 @@ SYM_CODE_START(startup_64)
 	movq	%rsi, %r15
 
 	call	load_stage1_idt
-
-	/*
-	 * configure_5level_paging() updates the number of paging levels using
-	 * a trampoline in 32-bit addressable memory if the current number does
-	 * not match the desired number.
-	 *
-	 * Pass the boot_params pointer as the first argument. The second
-	 * argument is the relocated address of the page table to use instead
-	 * of the page table in trampoline memory (if required).
-	 */
-	movq	%r15, %rdi
-	leaq	rva(top_pgtable)(%rbx), %rsi
-	call	configure_5level_paging
 
 	/* Zero EFLAGS */
 	pushq	$0
@@ -421,109 +386,6 @@ SYM_FUNC_START_LOCAL_NOALIGN(.Lrelocated)
 	jmp	*%rax
 SYM_FUNC_END(.Lrelocated)
 
-/*
- * This is the 32-bit trampoline that will be copied over to low memory. It
- * will be called using the ordinary 64-bit calling convention from code
- * running in 64-bit mode.
- *
- * Return address is at the top of the stack (might be above 4G).
- * The first argument (EDI) contains the address of the temporary PGD level
- * page table in 32-bit addressable memory which will be programmed into
- * register CR3.
- */
-	.section ".rodata", "a", @progbits
-SYM_CODE_START(trampoline_32bit_src)
-	/*
-	 * Preserve callee save 64-bit registers on the stack: this is
-	 * necessary because the architecture does not guarantee that GPRs will
-	 * retain their full 64-bit values across a 32-bit mode switch.
-	 */
-	pushq	%r15
-	pushq	%r14
-	pushq	%r13
-	pushq	%r12
-	pushq	%rbp
-	pushq	%rbx
-
-	/* Preserve top half of RSP in a legacy mode GPR to avoid truncation */
-	movq	%rsp, %rbx
-	shrq	$32, %rbx
-
-	/* Switch to compatibility mode (CS.L = 0 CS.D = 1) via far return */
-	pushq	$__KERNEL32_CS
-	leaq	0f(%rip), %rax
-	pushq	%rax
-	lretq
-
-	/*
-	 * The 32-bit code below will do a far jump back to long mode and end
-	 * up here after reconfiguring the number of paging levels. First, the
-	 * stack pointer needs to be restored to its full 64-bit value before
-	 * the callee save register contents can be popped from the stack.
-	 */
-.Lret:
-	shlq	$32, %rbx
-	orq	%rbx, %rsp
-
-	/* Restore the preserved 64-bit registers */
-	popq	%rbx
-	popq	%rbp
-	popq	%r12
-	popq	%r13
-	popq	%r14
-	popq	%r15
-	retq
-
-	.code32
-0:
-	/* Disable paging */
-	movl	%cr0, %eax
-	btrl	$X86_CR0_PG_BIT, %eax
-	movl	%eax, %cr0
-
-	/* Point CR3 to the trampoline's new top level page table */
-	movl	%edi, %cr3
-
-	/* Set EFER.LME=1 as a precaution in case hypervsior pulls the rug */
-	movl	$MSR_EFER, %ecx
-	rdmsr
-	btsl	$_EFER_LME, %eax
-	/* Avoid writing EFER if no change was made (for TDX guest) */
-	jc	1f
-	wrmsr
-1:
-	/* Toggle CR4.LA57 */
-	movl	%cr4, %eax
-	btcl	$X86_CR4_LA57_BIT, %eax
-	movl	%eax, %cr4
-
-	/* Enable paging again. */
-	movl	%cr0, %eax
-	btsl	$X86_CR0_PG_BIT, %eax
-	movl	%eax, %cr0
-
-	/*
-	 * Return to the 64-bit calling code using LJMP rather than LRET, to
-	 * avoid the need for a 32-bit addressable stack. The destination
-	 * address will be adjusted after the template code is copied into a
-	 * 32-bit addressable buffer.
-	 */
-.Ljmp:	ljmpl	$__KERNEL_CS, $(.Lret - trampoline_32bit_src)
-SYM_CODE_END(trampoline_32bit_src)
-
-/*
- * This symbol is placed right after trampoline_32bit_src() so its address can
- * be used to infer the size of the trampoline code.
- */
-SYM_DATA(trampoline_ljmp_imm_offset, .word  .Ljmp + 1 - trampoline_32bit_src)
-
-	/*
-         * The trampoline code has a size limit.
-         * Make sure we fail to compile if the trampoline code grows
-         * beyond TRAMPOLINE_32BIT_CODE_SIZE bytes.
-	 */
-	.org	trampoline_32bit_src + TRAMPOLINE_32BIT_CODE_SIZE
-
 	.text
 SYM_FUNC_START_LOCAL_NOALIGN(.Lno_longmode)
 	/* This isn't an x86-64 CPU, so hang intentionally, we cannot continue */
@@ -580,9 +442,3 @@ SYM_DATA_END_LABEL(boot_stack, SYM_L_LOCAL, boot_stack_end)
 	.section ".pgtable","aw",@nobits
 	.balign 4096
 SYM_DATA_LOCAL(pgtable,		.fill BOOT_PGT_SIZE, 1, 0)
-
-/*
- * The page table is going to be used instead of page table in the trampoline
- * memory.
- */
-SYM_DATA_LOCAL(top_pgtable,	.fill PAGE_SIZE, 1, 0)

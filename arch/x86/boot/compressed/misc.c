@@ -14,7 +14,6 @@
 
 #include "misc.h"
 #include "error.h"
-#include "pgtable.h"
 #include "../string.h"
 #include "../voffset.h"
 #include <asm/bootparam_utils.h>
@@ -435,11 +434,6 @@ asmlinkage __visible void *extract_kernel(void *rmode, unsigned char *output)
 	debug_putaddr(output_len);
 	debug_putaddr(kernel_total_size);
 	debug_putaddr(needed_size);
-
-#ifdef CONFIG_X86_64
-	/* Report address of 32-bit trampoline */
-	debug_putaddr(trampoline_32bit);
-#endif
 
 	choose_random_location((unsigned long)input_data, input_len,
 				(unsigned long *)&output,
