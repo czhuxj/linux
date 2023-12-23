@@ -89,32 +89,16 @@ SYM_CODE_START_NOALIGN(startup_64)
 .Lon_kernel_cs:
 	UNWIND_HINT_END_OF_STACK
 
-#ifdef CONFIG_AMD_MEM_ENCRYPT
-	/*
-	 * Activate SEV/SME memory encryption if supported/enabled. This needs to
-	 * be done now, since this also includes setup of the SEV-SNP CPUID table,
-	 * which needs to be done before any CPUID instructions are executed in
-	 * subsequent code. Pass the boot_params pointer as the first argument.
-	 */
-	movq	%r15, %rdi
-	call	sme_enable
-#endif
-
 	/* Sanitize CPU configuration */
 	call verify_cpu
 
-	/*
-	 * Perform pagetable fixups. Additionally, if SME is active, encrypt
-	 * the kernel and retrieve the modifier (SME encryption mask if SME
-	 * is active) to be added to the initial pgdir entry that will be
-	 * programmed into CR3.
-	 */
+	/* Perform pagetable fixups */
 	leaq	_text(%rip), %rdi
 	movq	%r15, %rsi
 	call	__startup_64
 
-	/* Form the CR3 value being sure to include the CR3 modifier */
-	addq	$(early_top_pgt - __START_KERNEL_map), %rax
+	/* Form the CR3 value */
+	movq	$(early_top_pgt - __START_KERNEL_map), %rax
 	jmp 1f
 SYM_CODE_END(startup_64)
 
@@ -152,18 +136,8 @@ SYM_INNER_LABEL(secondary_startup_64_no_verify, SYM_L_GLOBAL)
 	/* Clear %R15 which holds the boot_params pointer on the boot CPU */
 	xorq	%r15, %r15
 
-	/*
-	 * Retrieve the modifier (SME encryption mask if SME is active) to be
-	 * added to the initial pgdir entry that will be programmed into CR3.
-	 */
-#ifdef CONFIG_AMD_MEM_ENCRYPT
-	movq	sme_me_mask, %rax
-#else
-	xorq	%rax, %rax
-#endif
-
-	/* Form the CR3 value being sure to include the CR3 modifier */
-	addq	$(init_top_pgt - __START_KERNEL_map), %rax
+	/* Form the CR3 value */
+	movq	$(init_top_pgt - __START_KERNEL_map), %rax
 1:
 
 #ifdef CONFIG_X86_MCE
@@ -192,15 +166,6 @@ SYM_INNER_LABEL(secondary_startup_64_no_verify, SYM_L_GLOBAL)
 
 	/* Setup early boot stage 4-/5-level pagetables. */
 	addq	phys_base(%rip), %rax
-
-	/*
-	 * For SEV guests: Verify that the C-bit is correct. A malicious
-	 * hypervisor could lie about the C-bit position to perform a ROP
-	 * attack on the guest by writing to the unencrypted stack and wait for
-	 * the next RET instruction.
-	 */
-	movq	%rax, %rdi
-	call	sev_verify_cbit
 
 	/*
 	 * Switch to new page-table
@@ -452,7 +417,6 @@ SYM_INNER_LABEL(secondary_startup_64_no_verify, SYM_L_GLOBAL)
 SYM_CODE_END(secondary_startup_64)
 
 #include "verify_cpu.S"
-#include "sev_verify_cbit.S"
 
 #if defined(CONFIG_HOTPLUG_CPU) && defined(CONFIG_AMD_MEM_ENCRYPT)
 /*
@@ -472,46 +436,10 @@ SYM_CODE_START(soft_restart_cpu)
 SYM_CODE_END(soft_restart_cpu)
 #endif
 
-#ifdef CONFIG_AMD_MEM_ENCRYPT
-/*
- * VC Exception handler used during early boot when running on kernel
- * addresses, but before the switch to the idt_table can be made.
- * The early_idt_handler_array can't be used here because it calls into a lot
- * of __init code and this handler is also used during CPU offlining/onlining.
- * Therefore this handler ends up in the .text section so that it stays around
- * when .init.text is freed.
- */
-SYM_CODE_START_NOALIGN(vc_boot_ghcb)
-	UNWIND_HINT_IRET_REGS offset=8
-	ENDBR
-
-	/* Build pt_regs */
-	PUSH_AND_CLEAR_REGS
-
-	/* Call C handler */
-	movq    %rsp, %rdi
-	movq	ORIG_RAX(%rsp), %rsi
-	movq	initial_vc_handler(%rip), %rax
-	ANNOTATE_RETPOLINE_SAFE
-	call	*%rax
-
-	/* Unwind pt_regs */
-	POP_REGS
-
-	/* Remove Error Code */
-	addq    $8, %rsp
-
-	iretq
-SYM_CODE_END(vc_boot_ghcb)
-#endif
-
 	/* Both SMP bootup and ACPI suspend change these variables */
 	__REFDATA
 	.balign	8
 SYM_DATA(initial_code,	.quad x86_64_start_kernel)
-#ifdef CONFIG_AMD_MEM_ENCRYPT
-SYM_DATA(initial_vc_handler,	.quad handle_vc_boot_ghcb)
-#endif
 
 SYM_DATA(trampoline_lock, .quad 0);
 	__FINITDATA
@@ -572,40 +500,6 @@ SYM_CODE_START_LOCAL(early_idt_handler_common)
 	decl early_recursion_flag(%rip)
 	jmp restore_regs_and_return_to_kernel
 SYM_CODE_END(early_idt_handler_common)
-
-#ifdef CONFIG_AMD_MEM_ENCRYPT
-/*
- * VC Exception handler used during very early boot. The
- * early_idt_handler_array can't be used because it returns via the
- * paravirtualized INTERRUPT_RETURN and pv-ops don't work that early.
- *
- * XXX it does, fix this.
- *
- * This handler will end up in the .init.text section and not be
- * available to boot secondary CPUs.
- */
-SYM_CODE_START_NOALIGN(vc_no_ghcb)
-	UNWIND_HINT_IRET_REGS offset=8
-	ENDBR
-
-	/* Build pt_regs */
-	PUSH_AND_CLEAR_REGS
-
-	/* Call C handler */
-	movq    %rsp, %rdi
-	movq	ORIG_RAX(%rsp), %rsi
-	call    do_vc_no_ghcb
-
-	/* Unwind pt_regs */
-	POP_REGS
-
-	/* Remove Error Code */
-	addq    $8, %rsp
-
-	/* Pure iret required here - don't use INTERRUPT_RETURN */
-	iretq
-SYM_CODE_END(vc_no_ghcb)
-#endif
 
 #define SYM_DATA_START_PAGE_ALIGNED(name)			\
 	SYM_START(name, SYM_L_GLOBAL, .balign PAGE_SIZE)

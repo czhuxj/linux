@@ -39,7 +39,6 @@
 #include <asm/realmode.h>
 #include <asm/extable.h>
 #include <asm/trapnr.h>
-#include <asm/sev.h>
 
 /*
  * Manage page tables very early on.
@@ -126,57 +125,13 @@ static bool __head check_la57_support(unsigned long physaddr)
 }
 #endif
 
-static unsigned long __head sme_postprocess_startup(struct boot_params *bp, pmdval_t *pmd)
-{
-	unsigned long vaddr, vaddr_end;
-	int i;
-
-	/* Encrypt the kernel and related (if SME is active) */
-	sme_encrypt_kernel(bp);
-
-	/*
-	 * Clear the memory encryption mask from the .bss..decrypted section.
-	 * The bss section will be memset to zero later in the initialization so
-	 * there is no need to zero it after changing the memory encryption
-	 * attribute.
-	 */
-	if (sme_get_me_mask()) {
-		vaddr = (unsigned long)__start_bss_decrypted;
-		vaddr_end = (unsigned long)__end_bss_decrypted;
-
-		for (; vaddr < vaddr_end; vaddr += PMD_SIZE) {
-			/*
-			 * On SNP, transition the page to shared in the RMP table so that
-			 * it is consistent with the page table attribute change.
-			 *
-			 * __start_bss_decrypted has a virtual address in the high range
-			 * mapping (kernel .text). PVALIDATE, by way of
-			 * early_snp_set_memory_shared(), requires a valid virtual
-			 * address but the kernel is currently running off of the identity
-			 * mapping so use __pa() to get a *currently* valid virtual address.
-			 */
-			early_snp_set_memory_shared(__pa(vaddr), __pa(vaddr), PTRS_PER_PMD);
-
-			i = pmd_index(vaddr);
-			pmd[i] -= sme_get_me_mask();
-		}
-	}
-
-	/*
-	 * Return the SME encryption mask (if SME is active) to be used as a
-	 * modifier for the initial pgdir entry programmed into CR3.
-	 */
-	return sme_get_me_mask();
-}
-
 /* Code in __startup_64() can be relocated during execution, but the compiler
  * doesn't have to generate PC-relative relocations when accessing globals from
  * that function. Clang actually does not generate them, which leads to
  * boot-time crashes. To work around this problem, every global pointer must
  * be adjusted using fixup_pointer().
  */
-unsigned long __head __startup_64(unsigned long physaddr,
-				  struct boot_params *bp)
+void __head __startup_64(unsigned long physaddr, struct boot_params *bp)
 {
 	unsigned long load_delta, *p;
 	unsigned long pgtable_flags;
@@ -204,9 +159,6 @@ unsigned long __head __startup_64(unsigned long physaddr,
 	/* Is the address not 2M aligned? */
 	if (load_delta & ~PMD_MASK)
 		for (;;);
-
-	/* Include the SME encryption mask in the fixup value */
-	load_delta += sme_get_me_mask();
 
 	/* Fixup the physical addresses in the page table */
 
@@ -242,7 +194,7 @@ unsigned long __head __startup_64(unsigned long physaddr,
 	pud = fixup_pointer(early_dynamic_pgts[(*next_pgt_ptr)++], physaddr);
 	pmd = fixup_pointer(early_dynamic_pgts[(*next_pgt_ptr)++], physaddr);
 
-	pgtable_flags = _KERNPG_TABLE_NOENC + sme_get_me_mask();
+	pgtable_flags = _KERNPG_TABLE_NOENC;
 
 	if (la57) {
 		p4d = fixup_pointer(early_dynamic_pgts[(*next_pgt_ptr)++],
@@ -269,7 +221,6 @@ unsigned long __head __startup_64(unsigned long physaddr,
 	/* Filter out unsupported __PAGE_KERNEL_* bits: */
 	mask_ptr = fixup_pointer(&__supported_pte_mask, physaddr);
 	pmd_entry &= *mask_ptr;
-	pmd_entry += sme_get_me_mask();
 	pmd_entry +=  physaddr;
 
 	for (i = 0; i < DIV_ROUND_UP(_end - _text, PMD_SIZE); i++) {
@@ -309,13 +260,8 @@ unsigned long __head __startup_64(unsigned long physaddr,
 	for (; i < PTRS_PER_PMD; i++)
 		pmd[i] &= ~_PAGE_PRESENT;
 
-	/*
-	 * Fixup phys_base - remove the memory encryption mask to obtain
-	 * the true physical address.
-	 */
-	*fixup_long(&phys_base, physaddr) += load_delta - sme_get_me_mask();
-
-	return sme_postprocess_startup(bp, pmd);
+	/* Fixup phys_base */
+	*fixup_long(&phys_base, physaddr) += load_delta;
 }
 
 /* Wipe all early page tables except for the kernel symbol map */
@@ -323,7 +269,7 @@ static void __init reset_early_page_tables(void)
 {
 	memset(early_top_pgt, 0, sizeof(pgd_t)*(PTRS_PER_PGD-1));
 	next_early_pgt = 0;
-	write_cr3(__sme_pa_nodebug(early_top_pgt));
+	write_cr3(__pa_nodebug(early_top_pgt));
 }
 
 /* Create a new PMD entry */
@@ -413,10 +359,6 @@ void __init do_early_exception(struct pt_regs *regs, int trapnr)
 	    early_make_pgtable(native_read_cr2()))
 		return;
 
-	if (IS_ENABLED(CONFIG_AMD_MEM_ENCRYPT) &&
-	    trapnr == X86_TRAP_VC && handle_vc_boot_ghcb(regs))
-		return;
-
 	early_fixup_exception(regs, trapnr);
 }
 
@@ -444,12 +386,6 @@ static void __init copy_bootdata(char *real_mode_data)
 	char * command_line;
 	unsigned long cmd_line_ptr;
 
-	/*
-	 * If SME is active, this will create decrypted mappings of the
-	 * boot data in advance of the copy operations.
-	 */
-	sme_map_bootdata(real_mode_data);
-
 	memcpy(&boot_params, real_mode_data, sizeof(boot_params));
 	sanitize_boot_params(&boot_params);
 	cmd_line_ptr = get_cmd_line_ptr();
@@ -457,14 +393,6 @@ static void __init copy_bootdata(char *real_mode_data)
 		command_line = __va(cmd_line_ptr);
 		memcpy(boot_command_line, command_line, COMMAND_LINE_SIZE);
 	}
-
-	/*
-	 * The old boot data is no longer needed and won't be reserved,
-	 * freeing up that memory for use by the system. If SME is active,
-	 * we need to remove the mappings that were created so that the
-	 * memory doesn't remain mapped as decrypted.
-	 */
-	sme_unmap_bootdata(real_mode_data);
 }
 
 asmlinkage __visible void __init __noreturn x86_64_start_kernel(char * real_mode_data)
@@ -495,13 +423,6 @@ asmlinkage __visible void __init __noreturn x86_64_start_kernel(char * real_mode
 	 * into that page.
 	 */
 	clear_page(init_top_pgt);
-
-	/*
-	 * SME support may update early_pmd_flags to include the memory
-	 * encryption mask, so it needs to be called before anything
-	 * that may generate a page fault.
-	 */
-	sme_early_init();
 
 	kasan_early_init();
 
@@ -568,32 +489,11 @@ static struct desc_ptr bringup_idt_descr = {
 	.address	= 0, /* Set at runtime */
 };
 
-static void set_bringup_idt_handler(gate_desc *idt, int n, void *handler)
-{
-#ifdef CONFIG_AMD_MEM_ENCRYPT
-	struct idt_data data;
-	gate_desc desc;
-
-	init_idt_data(&data, n, handler);
-	idt_init_desc(&desc, &data);
-	native_write_idt_entry(idt, n, &desc);
-#endif
-}
-
 /* This runs while still in the direct mapping */
 static void startup_64_load_idt(unsigned long physbase)
 {
 	struct desc_ptr *desc = fixup_pointer(&bringup_idt_descr, physbase);
 	gate_desc *idt = fixup_pointer(bringup_idt_table, physbase);
-
-
-	if (IS_ENABLED(CONFIG_AMD_MEM_ENCRYPT)) {
-		void *handler;
-
-		/* VMM Communication Exception */
-		handler = fixup_pointer(vc_no_ghcb, physbase);
-		set_bringup_idt_handler(idt, X86_TRAP_VC, handler);
-	}
 
 	desc->address = (unsigned long)idt;
 	native_load_idt(desc);
@@ -602,12 +502,6 @@ static void startup_64_load_idt(unsigned long physbase)
 /* This is used when running on kernel addresses */
 void early_setup_idt(void)
 {
-	/* VMM Communication Exception */
-	if (IS_ENABLED(CONFIG_AMD_MEM_ENCRYPT)) {
-		setup_ghcb();
-		set_bringup_idt_handler(bringup_idt_table, X86_TRAP_VC, vc_boot_ghcb);
-	}
-
 	bringup_idt_descr.address = (unsigned long)bringup_idt_table;
 	native_load_idt(&bringup_idt_descr);
 }

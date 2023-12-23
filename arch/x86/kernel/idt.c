@@ -108,10 +108,6 @@ static const __initconst struct idt_data def_idts[] = {
 	INTG(X86_TRAP_CP,		asm_exc_control_protection),
 #endif
 
-#ifdef CONFIG_AMD_MEM_ENCRYPT
-	ISTG(X86_TRAP_VC,		asm_exc_vmm_communication, IST_INDEX_VC),
-#endif
-
 	SYSG(X86_TRAP_OF,		asm_exc_overflow),
 #if defined(CONFIG_IA32_EMULATION)
 	SYSG(IA32_SYSCALL_VECTOR,	asm_int80_emulation),
