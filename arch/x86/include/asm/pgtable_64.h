@@ -16,8 +16,6 @@
 #include <linux/threads.h>
 #include <asm/fixmap.h>
 
-extern p4d_t level4_kernel_pgt[512];
-extern p4d_t level4_ident_pgt[512];
 extern pud_t level3_kernel_pgt[512];
 extern pud_t level3_ident_pgt[512];
 extern pmd_t level2_kernel_pgt[512];

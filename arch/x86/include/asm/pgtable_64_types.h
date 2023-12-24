@@ -21,53 +21,11 @@ typedef unsigned long	pgprotval_t;
 typedef struct { pteval_t pte; } pte_t;
 typedef struct { pmdval_t pmd; } pmd_t;
 
-#ifdef CONFIG_X86_5LEVEL
-extern unsigned int __pgtable_l5_enabled;
-
-#ifdef USE_EARLY_PGTABLE_L5
-/*
- * cpu_feature_enabled() is not available in early boot code.
- * Use variable instead.
- */
-static inline bool pgtable_l5_enabled(void)
-{
-	return __pgtable_l5_enabled;
-}
-#else
-#define pgtable_l5_enabled() cpu_feature_enabled(X86_FEATURE_LA57)
-#endif /* USE_EARLY_PGTABLE_L5 */
-
-#else
 #define pgtable_l5_enabled() 0
-#endif /* CONFIG_X86_5LEVEL */
-
-extern unsigned int pgdir_shift;
-extern unsigned int ptrs_per_p4d;
 
 #endif	/* !__ASSEMBLY__ */
 
 #define SHARED_KERNEL_PMD	0
-
-#ifdef CONFIG_X86_5LEVEL
-
-/*
- * PGDIR_SHIFT determines what a top-level page table entry can map
- */
-#define PGDIR_SHIFT	pgdir_shift
-#define PTRS_PER_PGD	512
-
-/*
- * 4th level page in 5-level paging case
- */
-#define P4D_SHIFT		39
-#define MAX_PTRS_PER_P4D	512
-#define PTRS_PER_P4D		ptrs_per_p4d
-#define P4D_SIZE		(_AC(1, UL) << P4D_SHIFT)
-#define P4D_MASK		(~(P4D_SIZE - 1))
-
-#define MAX_POSSIBLE_PHYSMEM_BITS	52
-
-#else /* CONFIG_X86_5LEVEL */
 
 /*
  * PGDIR_SHIFT determines what a top-level page table entry can map
@@ -75,8 +33,6 @@ extern unsigned int ptrs_per_p4d;
 #define PGDIR_SHIFT		39
 #define PTRS_PER_PGD		512
 #define MAX_PTRS_PER_P4D	1
-
-#endif /* CONFIG_X86_5LEVEL */
 
 /*
  * 3rd level page

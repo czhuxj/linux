@@ -154,17 +154,11 @@ SYM_INNER_LABEL(secondary_startup_64_no_verify, SYM_L_GLOBAL)
 	movl	$0, %ecx
 #endif
 
-	/* Enable PAE mode, PGE and LA57 */
+	/* Enable PAE mode and PGE */
 	orl	$(X86_CR4_PAE | X86_CR4_PGE), %ecx
-#ifdef CONFIG_X86_5LEVEL
-	testl	$1, __pgtable_l5_enabled(%rip)
-	jz	1f
-	orl	$X86_CR4_LA57, %ecx
-1:
-#endif
 	movq	%rcx, %cr4
 
-	/* Setup early boot stage 4-/5-level pagetables. */
+	/* Setup early boot stage pagetables. */
 	addq	phys_base(%rip), %rax
 
 	/*
@@ -580,13 +574,6 @@ SYM_DATA_START_PTI_ALIGNED(init_top_pgt)
 	.fill	512,8,0
 	.fill	PTI_USER_PGD_FILL,8,0
 SYM_DATA_END(init_top_pgt)
-#endif
-
-#ifdef CONFIG_X86_5LEVEL
-SYM_DATA_START_PAGE_ALIGNED(level4_kernel_pgt)
-	.fill	511,8,0
-	.quad	level3_kernel_pgt - __START_KERNEL_map + _PAGE_TABLE_NOENC
-SYM_DATA_END(level4_kernel_pgt)
 #endif
 
 SYM_DATA_START_PAGE_ALIGNED(level3_kernel_pgt)
