@@ -49,7 +49,6 @@
 #include <asm/proto.h>
 #include <asm/frame.h>
 #include <asm/unwind.h>
-#include <asm/tdx.h>
 #include <asm/mmu_context.h>
 #include <asm/shstk.h>
 
@@ -948,9 +947,6 @@ void select_idle_routine(const struct cpuinfo_x86 *c)
 	} else if (prefer_mwait_c1_over_halt(c)) {
 		pr_info("using mwait in idle threads\n");
 		static_call_update(x86_idle, mwait_idle);
-	} else if (cpu_feature_enabled(X86_FEATURE_TDX_GUEST)) {
-		pr_info("using TDX aware idle routine\n");
-		static_call_update(x86_idle, tdx_safe_halt);
 	} else
 		static_call_update(x86_idle, default_idle);
 }
