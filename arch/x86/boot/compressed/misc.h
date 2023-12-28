@@ -31,7 +31,6 @@
 #include <asm/page.h>
 #include <asm/boot.h>
 #include <asm/bootparam.h>
-#include <asm/desc_defs.h>
 
 #define BOOT_CTYPE_H
 #include <linux/acpi.h>
@@ -45,9 +44,6 @@
 #else
 #define memptr unsigned
 #endif
-
-/* boot/compressed/vmlinux start and end markers */
-extern char _head[], _end[];
 
 /* misc.c */
 extern memptr free_mem_ptr;
@@ -109,10 +105,6 @@ static inline void choose_random_location(unsigned long input,
 /* cpuflags.c */
 bool has_cpuflag(int flag);
 
-#ifdef CONFIG_X86_64
-extern unsigned char _pgtable[];
-#endif
-
 #ifdef CONFIG_EARLY_PRINTK
 /* early_serial_console.c */
 extern int early_serial_base;
@@ -136,24 +128,5 @@ int count_immovable_mem_regions(void);
 #else
 static inline int count_immovable_mem_regions(void) { return 0; }
 #endif
-
-/* ident_map_64.c */
-extern void kernel_add_identity_map(unsigned long start, unsigned long end);
-
-/* Used by PAGE_KERN* macros: */
-extern pteval_t __default_kernel_pte_mask;
-
-/* idt_64.c */
-extern gate_desc boot_idt[BOOT_IDT_ENTRIES];
-extern struct desc_ptr boot_idt_desc;
-
-#ifdef CONFIG_X86_64
-void cleanup_exception_handling(void);
-#else
-static inline void cleanup_exception_handling(void) { }
-#endif
-
-/* IDT Entry Points */
-void boot_page_fault(void);
 
 #endif /* BOOT_COMPRESSED_MISC_H */

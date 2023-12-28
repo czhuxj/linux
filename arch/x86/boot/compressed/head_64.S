@@ -33,8 +33,6 @@
 #include <asm/processor-flags.h>
 #include <asm/asm-offsets.h>
 #include <asm/bootparam.h>
-#include <asm/desc_defs.h>
-#include <asm/trapnr.h>
 
 /*
  * Fix alignment at 16 bytes. Following CONFIG_FUNCTION_ALIGNMENT will result
@@ -243,13 +241,9 @@ SYM_FUNC_END(startup_32)
 SYM_CODE_START(startup_64)
 	/*
 	 * 64bit entry is 0x200 and it is ABI so immutable!
-	 * We come here either from startup_32 or directly from a
-	 * 64bit bootloader.
-	 * If we come here from a bootloader, kernel(text+data+bss+brk),
-	 * ramdisk, zero_page, command line could be above 4G.
-	 * We depend on an identity mapped page table being provided
-	 * that maps our entire kernel(text+data+bss+brk), zero page
-	 * and command line.
+	 * We must come here from startup_32 instead of from a
+	 * 64bit bootloader so kernel is below 4G and identity
+	 * map is not needed.
 	 */
 
 	cld
@@ -317,8 +311,6 @@ SYM_CODE_START(startup_64)
 	 */
 	movq	%rsi, %r15
 
-	call	load_stage1_idt
-
 	/* Zero EFLAGS */
 	pushq	$0
 	popfq
@@ -365,12 +357,6 @@ SYM_FUNC_START_LOCAL_NOALIGN(.Lrelocated)
 	shrq	$3, %rcx
 	rep	stosq
 
-	call	load_stage2_idt
-
-	/* Pass boot_params to initialize_identity_maps() */
-	movq	%r15, %rdi
-	call	initialize_identity_maps
-
 /*
  * Do the extraction, and jump to the new kernel..
  */
@@ -413,18 +399,6 @@ SYM_DATA_START_LOCAL(gdt)
 	.quad	0x0080890000000000	/* TS descriptor */
 	.quad   0x0000000000000000	/* TS continued */
 SYM_DATA_END_LABEL(gdt, SYM_L_LOCAL, gdt_end)
-
-SYM_DATA_START(boot_idt_desc)
-	.word	boot_idt_end - boot_idt - 1
-	.quad	0
-SYM_DATA_END(boot_idt_desc)
-	.balign 8
-SYM_DATA_START(boot_idt)
-	.rept	BOOT_IDT_ENTRIES
-	.quad	0
-	.quad	0
-	.endr
-SYM_DATA_END_LABEL(boot_idt, SYM_L_GLOBAL, boot_idt_end)
 
 /*
  * Stack and heap for uncompression

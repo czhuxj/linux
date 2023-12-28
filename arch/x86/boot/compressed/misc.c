@@ -467,9 +467,6 @@ asmlinkage __visible void *extract_kernel(void *rmode, unsigned char *output)
 	debug_puthex(entry_offset);
 	debug_putstr(").\n");
 
-	/* Disable exception handling before booting the kernel */
-	cleanup_exception_handling();
-
 	return output + entry_offset;
 }
 
