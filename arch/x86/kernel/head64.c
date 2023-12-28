@@ -78,11 +78,6 @@ static void __head *fixup_pointer(void *ptr, unsigned long physaddr)
 	return ptr - (void *)_text + (void *)physaddr;
 }
 
-static unsigned long __head *fixup_long(void *ptr, unsigned long physaddr)
-{
-	return fixup_pointer(ptr, physaddr);
-}
-
 /* Code in __startup_64() can be relocated during execution, but the compiler
  * doesn't have to generate PC-relative relocations when accessing globals from
  * that function. Clang actually does not generate them, which leads to
@@ -110,8 +105,8 @@ void __head __startup_64(unsigned long physaddr, struct boot_params *bp)
 	 */
 	load_delta = physaddr - (unsigned long)(_text - __START_KERNEL_map);
 
-	/* Is the address not 2M aligned? */
-	if (load_delta & ~PMD_MASK)
+	/* Is the address relocated? */
+	if (load_delta)
 		for (;;);
 
 	/* Fixup the physical addresses in the page table */
@@ -119,15 +114,7 @@ void __head __startup_64(unsigned long physaddr, struct boot_params *bp)
 	pgd = fixup_pointer(&early_top_pgt, physaddr);
 	p = pgd + pgd_index(__START_KERNEL_map);
 	*p = (unsigned long)level3_kernel_pgt;
-	*p += _PAGE_TABLE_NOENC - __START_KERNEL_map + load_delta;
-
-	pud = fixup_pointer(&level3_kernel_pgt, physaddr);
-	pud[510] += load_delta;
-	pud[511] += load_delta;
-
-	pmd = fixup_pointer(level2_fixmap_pgt, physaddr);
-	for (i = FIXMAP_PMD_TOP; i > FIXMAP_PMD_TOP - FIXMAP_PMD_NUM; i--)
-		pmd[i] += load_delta;
+	*p += _PAGE_TABLE_NOENC - __START_KERNEL_map;
 
 	/*
 	 * Set up the identity mapping for the switchover.  These
@@ -184,17 +171,10 @@ void __head __startup_64(unsigned long physaddr, struct boot_params *bp)
 	for (i = 0; i < pmd_index((unsigned long)_text); i++)
 		pmd[i] &= ~_PAGE_PRESENT;
 
-	/* fixup pages that are part of the kernel image */
-	for (; i <= pmd_index((unsigned long)_end); i++)
-		if (pmd[i] & _PAGE_PRESENT)
-			pmd[i] += load_delta;
-
 	/* invalidate pages after the kernel image */
+	i = pmd_index((unsigned long)_end) + 1;
 	for (; i < PTRS_PER_PMD; i++)
 		pmd[i] &= ~_PAGE_PRESENT;
-
-	/* Fixup phys_base */
-	*fixup_long(&phys_base, physaddr) += load_delta;
 }
 
 /* Wipe all early page tables except for the kernel symbol map */

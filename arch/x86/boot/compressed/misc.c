@@ -3,8 +3,8 @@
  * misc.c
  *
  * This is a collection of several routines used to extract the kernel
- * which includes KASLR relocation, decompression, ELF parsing, and
- * relocation processing. Additionally included are the screen and serial
+ * which includes decompression and ELF parsing.
+ * Additionally included are the screen and serial
  * output functions and related debugging support functions.
  *
  * malloc by Hannu Savolainen 1993 and Matthias Urlichs 1994
@@ -178,102 +178,6 @@ void __puthex(unsigned long value)
 	}
 }
 
-#ifdef CONFIG_X86_NEED_RELOCS
-static void handle_relocations(void *output, unsigned long output_len,
-			       unsigned long virt_addr)
-{
-	int *reloc;
-	unsigned long delta, map, ptr;
-	unsigned long min_addr = (unsigned long)output;
-	unsigned long max_addr = min_addr + (VO___bss_start - VO__text);
-
-	/*
-	 * Calculate the delta between where vmlinux was linked to load
-	 * and where it was actually loaded.
-	 */
-	delta = min_addr - LOAD_PHYSICAL_ADDR;
-
-	/*
-	 * The kernel contains a table of relocation addresses. Those
-	 * addresses have the final load address of the kernel in virtual
-	 * memory. We are currently working in the self map. So we need to
-	 * create an adjustment for kernel memory addresses to the self map.
-	 * This will involve subtracting out the base address of the kernel.
-	 */
-	map = delta - __START_KERNEL_map;
-
-	/*
-	 * 32-bit always performs relocations. 64-bit relocations are only
-	 * needed if KASLR has chosen a different starting address offset
-	 * from __START_KERNEL_map.
-	 */
-	if (IS_ENABLED(CONFIG_X86_64))
-		delta = virt_addr - LOAD_PHYSICAL_ADDR;
-
-	if (!delta) {
-		debug_putstr("No relocation needed... ");
-		return;
-	}
-	debug_putstr("Performing relocations... ");
-
-	/*
-	 * Process relocations: 32 bit relocations first then 64 bit after.
-	 * Three sets of binary relocations are added to the end of the kernel
-	 * before compression. Each relocation table entry is the kernel
-	 * address of the location which needs to be updated stored as a
-	 * 32-bit value which is sign extended to 64 bits.
-	 *
-	 * Format is:
-	 *
-	 * kernel bits...
-	 * 0 - zero terminator for 64 bit relocations
-	 * 64 bit relocation repeated
-	 * 0 - zero terminator for inverse 32 bit relocations
-	 * 32 bit inverse relocation repeated
-	 * 0 - zero terminator for 32 bit relocations
-	 * 32 bit relocation repeated
-	 *
-	 * So we work backwards from the end of the decompressed image.
-	 */
-	for (reloc = output + output_len - sizeof(*reloc); *reloc; reloc--) {
-		long extended = *reloc;
-		extended += map;
-
-		ptr = (unsigned long)extended;
-		if (ptr < min_addr || ptr > max_addr)
-			error("32-bit relocation outside of kernel!\n");
-
-		*(uint32_t *)ptr += delta;
-	}
-#ifdef CONFIG_X86_64
-	while (*--reloc) {
-		long extended = *reloc;
-		extended += map;
-
-		ptr = (unsigned long)extended;
-		if (ptr < min_addr || ptr > max_addr)
-			error("inverse 32-bit relocation outside of kernel!\n");
-
-		*(int32_t *)ptr -= delta;
-	}
-	for (reloc--; *reloc; reloc--) {
-		long extended = *reloc;
-		extended += map;
-
-		ptr = (unsigned long)extended;
-		if (ptr < min_addr || ptr > max_addr)
-			error("64-bit relocation outside of kernel!\n");
-
-		*(uint64_t *)ptr += delta;
-	}
-#endif
-}
-#else
-static inline void handle_relocations(void *output, unsigned long output_len,
-				      unsigned long virt_addr)
-{ }
-#endif
-
 static size_t parse_elf(void *output)
 {
 #ifdef CONFIG_X86_64
@@ -310,12 +214,7 @@ static size_t parse_elf(void *output)
 			if ((phdr->p_align % 0x200000) != 0)
 				error("Alignment of LOAD segment isn't multiple of 2MB");
 #endif
-#ifdef CONFIG_RELOCATABLE
-			dest = output;
-			dest += (phdr->p_paddr - LOAD_PHYSICAL_ADDR);
-#else
 			dest = (void *)(phdr->p_paddr);
-#endif
 			memmove(dest, output + phdr->p_offset, phdr->p_filesz);
 			break;
 		default: /* Ignore other PT_* */ break;
@@ -334,8 +233,7 @@ static u8 boot_heap[BOOT_HEAP_SIZE] __aligned(4);
 extern unsigned char input_data[];
 extern unsigned int input_len, output_len;
 
-unsigned long decompress_kernel(unsigned char *outbuf, unsigned long virt_addr,
-				void (*error)(char *x))
+unsigned long decompress_kernel(unsigned char *outbuf, void (*error)(char *x))
 {
 	unsigned long entry;
 
@@ -349,7 +247,6 @@ unsigned long decompress_kernel(unsigned char *outbuf, unsigned long virt_addr,
 		return ULONG_MAX;
 
 	entry = parse_elf(outbuf);
-	handle_relocations(outbuf, output_len, virt_addr);
 
 	return entry;
 }
@@ -380,9 +277,6 @@ asmlinkage __visible void *extract_kernel(void *rmode, unsigned char *output)
 
 	/* Retain x86 boot parameters pointer passed from startup_32/64. */
 	boot_params = rmode;
-
-	/* Clear flags intended for solely in-kernel use. */
-	boot_params->hdr.loadflags &= ~KASLR_FLAG;
 
 	sanitize_boot_params(boot_params);
 
@@ -435,16 +329,9 @@ asmlinkage __visible void *extract_kernel(void *rmode, unsigned char *output)
 	debug_putaddr(kernel_total_size);
 	debug_putaddr(needed_size);
 
-	choose_random_location((unsigned long)input_data, input_len,
-				(unsigned long *)&output,
-				needed_size,
-				&virt_addr);
-
 	/* Validate memory location choices. */
 	if ((unsigned long)output & (MIN_KERNEL_ALIGN - 1))
 		error("Destination physical address inappropriately aligned");
-	if (virt_addr & (MIN_KERNEL_ALIGN - 1))
-		error("Destination virtual address inappropriately aligned");
 #ifdef CONFIG_X86_64
 	if (heap > 0x3fffffffffffUL)
 		error("Destination address too large");
@@ -454,14 +341,10 @@ asmlinkage __visible void *extract_kernel(void *rmode, unsigned char *output)
 	if (heap > ((-__PAGE_OFFSET-(128<<20)-1) & 0x7fffffff))
 		error("Destination address too large");
 #endif
-#ifndef CONFIG_RELOCATABLE
-	if (virt_addr != LOAD_PHYSICAL_ADDR)
-		error("Destination virtual address changed when not relocatable");
-#endif
 
 	debug_putstr("\nDecompressing Linux... ");
 
-	entry_offset = decompress_kernel(output, virt_addr, error);
+	entry_offset = decompress_kernel(output, error);
 
 	debug_putstr("done.\nBooting the kernel (entry_offset: 0x");
 	debug_puthex(entry_offset);

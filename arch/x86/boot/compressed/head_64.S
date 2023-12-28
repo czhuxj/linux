@@ -127,27 +127,7 @@ SYM_FUNC_START(startup_32)
 	testl	%eax, %eax
 	jnz	.Lno_longmode
 
-/*
- * Compute the delta between where we were compiled to run at
- * and where the code will actually run at.
- *
- * %ebp contains the address we are loaded at by the boot loader and %ebx
- * contains the address where we should move the kernel image temporarily
- * for safe in-place decompression.
- */
-
-#ifdef CONFIG_RELOCATABLE
-	movl	%ebp, %ebx
-	movl	BP_kernel_alignment(%esi), %eax
-	decl	%eax
-	addl	%eax, %ebx
-	notl	%eax
-	andl	%eax, %ebx
-	cmpl	$LOAD_PHYSICAL_ADDR, %ebx
-	jae	1f
-#endif
 	movl	$LOAD_PHYSICAL_ADDR, %ebx
-1:
 
 	/* Target address to relocate to for decompression */
 	addl	BP_init_size(%esi), %ebx
@@ -270,19 +250,7 @@ SYM_CODE_START(startup_64)
 	 * may have been invoked via the 64-bit entry point.
 	 */
 
-	/* Start with the delta to where the kernel will run at. */
-#ifdef CONFIG_RELOCATABLE
-	leaq	startup_32(%rip) /* - $startup_32 */, %rbp
-	movl	BP_kernel_alignment(%rsi), %eax
-	decl	%eax
-	addq	%rax, %rbp
-	notq	%rax
-	andq	%rax, %rbp
-	cmpq	$LOAD_PHYSICAL_ADDR, %rbp
-	jae	1f
-#endif
 	movq	$LOAD_PHYSICAL_ADDR, %rbp
-1:
 
 	/* Target address to relocate to for decompression */
 	movl	BP_init_size(%rsi), %ebx

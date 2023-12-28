@@ -80,28 +80,6 @@ static inline void debug_puthex(unsigned long value)
 int cmdline_find_option(const char *option, char *buffer, int bufsize);
 int cmdline_find_option_bool(const char *option);
 
-struct mem_vector {
-	u64 start;
-	u64 size;
-};
-
-#ifdef CONFIG_RANDOMIZE_BASE
-/* kaslr.c */
-void choose_random_location(unsigned long input,
-			    unsigned long input_size,
-			    unsigned long *output,
-			    unsigned long output_size,
-			    unsigned long *virt_addr);
-#else
-static inline void choose_random_location(unsigned long input,
-					  unsigned long input_size,
-					  unsigned long *output,
-					  unsigned long output_size,
-					  unsigned long *virt_addr)
-{
-}
-#endif
-
 /* cpuflags.c */
 bool has_cpuflag(int flag);
 
@@ -120,13 +98,6 @@ static inline void console_init(void)
 acpi_physical_address get_rsdp_addr(void);
 #else
 static inline acpi_physical_address get_rsdp_addr(void) { return 0; }
-#endif
-
-#if defined(CONFIG_RANDOMIZE_BASE) && defined(CONFIG_MEMORY_HOTREMOVE) && defined(CONFIG_ACPI)
-extern struct mem_vector immovable_mem[MAX_NUMNODES*2];
-int count_immovable_mem_regions(void);
-#else
-static inline int count_immovable_mem_regions(void) { return 0; }
 #endif
 
 #endif /* BOOT_COMPRESSED_MISC_H */

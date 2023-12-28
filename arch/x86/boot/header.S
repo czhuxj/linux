@@ -186,11 +186,7 @@ initrd_addr_max: .long 0x7fffffff
 kernel_alignment:  .long CONFIG_PHYSICAL_ALIGN	#physical addr alignment
 						#required for protected mode
 						#kernel
-#ifdef CONFIG_RELOCATABLE
-relocatable_kernel:    .byte 1
-#else
 relocatable_kernel:    .byte 0
-#endif
 min_alignment:		.byte MIN_KERNEL_ALIGN_LG2	# minimum alignment
 
 xloadflags:
@@ -200,12 +196,7 @@ xloadflags:
 # define XLF0 0
 #endif
 
-#if defined(CONFIG_RELOCATABLE) && defined(CONFIG_X86_64)
-   /* kernel/boot_param/ramdisk could be loaded above 4g */
-# define XLF1 XLF_CAN_BE_LOADED_ABOVE_4G
-#else
-# define XLF1 0
-#endif
+#define XLF1 0
 
 #define XLF23 0
 
