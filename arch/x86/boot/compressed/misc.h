@@ -83,16 +83,6 @@ int cmdline_find_option_bool(const char *option);
 /* cpuflags.c */
 bool has_cpuflag(int flag);
 
-#ifdef CONFIG_EARLY_PRINTK
-/* early_serial_console.c */
-extern int early_serial_base;
-void console_init(void);
-#else
-static const int early_serial_base;
-static inline void console_init(void)
-{ }
-#endif
-
 /* acpi.c */
 #ifdef CONFIG_ACPI
 acpi_physical_address get_rsdp_addr(void);

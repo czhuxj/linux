@@ -64,11 +64,6 @@ void main(void)
 	/* First, copy the boot header into the "zeropage" */
 	copy_boot_params();
 
-	/* Initialize the early-boot console */
-	console_init();
-	if (cmdline_find_option_bool("debug"))
-		puts("early console in setup code\n");
-
 	/* Make sure we have all the proper CPU support */
 	if (validate_cpu()) {
 		puts("Unable to boot - please use a kernel appropriate "

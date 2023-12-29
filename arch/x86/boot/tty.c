@@ -13,27 +13,10 @@
 
 #include "boot.h"
 
-int early_serial_base;
-
-#define XMTRDY          0x20
-
-#define TXR             0       /*  Transmit register (WRITE) */
-#define LSR             5       /*  Line Status               */
-
 /*
  * These functions are in .inittext so they can be used to signal
  * error during initialization.
  */
-
-static void __section(".inittext") serial_putchar(int ch)
-{
-	unsigned timeout = 0xffff;
-
-	while ((inb(early_serial_base + LSR) & XMTRDY) == 0 && --timeout)
-		cpu_relax();
-
-	outb(ch, early_serial_base + TXR);
-}
 
 static void __section(".inittext") bios_putchar(int ch)
 {
@@ -53,9 +36,6 @@ void __section(".inittext") putchar(int ch)
 		putchar('\r');	/* \n -> \r\n */
 
 	bios_putchar(ch);
-
-	if (early_serial_base != 0)
-		serial_putchar(ch);
 }
 
 void __section(".inittext") puts(const char *str)

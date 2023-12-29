@@ -98,33 +98,10 @@ static void scroll(void)
 		vidmem[i] = ' ';
 }
 
-#define XMTRDY          0x20
-
-#define TXR             0       /*  Transmit register (WRITE) */
-#define LSR             5       /*  Line Status               */
-static void serial_putchar(int ch)
-{
-	unsigned timeout = 0xffff;
-
-	while ((inb(early_serial_base + LSR) & XMTRDY) == 0 && --timeout)
-		cpu_relax();
-
-	outb(ch, early_serial_base + TXR);
-}
-
 void __putstr(const char *s)
 {
 	int x, y, pos;
 	char c;
-
-	if (early_serial_base) {
-		const char *str = s;
-		while (*str) {
-			if (*str == '\n')
-				serial_putchar('\r');
-			serial_putchar(*str++);
-		}
-	}
 
 	if (lines == 0 || cols == 0)
 		return;
@@ -290,8 +267,6 @@ asmlinkage __visible void *extract_kernel(void *rmode, unsigned char *output)
 
 	lines = boot_params->screen_info.orig_video_lines;
 	cols = boot_params->screen_info.orig_video_cols;
-
-	console_init();
 
 	/*
 	 * Save RSDP address for later use. Have this after console_init()
